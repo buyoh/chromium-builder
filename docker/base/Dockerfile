@@ -17,8 +17,8 @@ RUN UBUNTU_APT_URL=$UBUNTU_APT_URL DIST_CODENAME=$DIST_CODENAME . /configure-apt
     && apt-get install -qqy --no-install-recommends \
         git ca-certificates wget curl lsb-release sudo file \
         python xz-utils \
-        nano \
-    && bash /clean-after-apt.sh
+        nano
+# TODO: don't clean apt cache here. install-build-deps.sh will use apt-get.
 
 # We never push commits
 RUN git config --global user.email "user@example.com" \
@@ -51,9 +51,19 @@ RUN gclient config --spec="solutions = [ \
     ]" \
     && echo '' >> .gclient \
     && echo 'target_os = ["linux", "android"]' >> .gclient \
-    && gclient sync -j 16 --shallow --with_branch_heads --force
+    && gclient sync -j 16 --shallow --with_branch_heads --force --nohooks
+# Separate fetch and runhooks to cache the fetch
+# To avoid the error `Cannot change ownership to uid 376730, gid 89939: Invalid argument`,
+# we use TAR_OPTIONS=--no-same-owner
+RUN TAR_OPTIONS=--no-same-owner gclient runhooks -j 16
 
-RUN bash src/build/install-build-deps.sh --no-prompt --backwards-compatible \
+# install build dependencies into docker image
+
+# Use debconf-set-selections to accept the EULA for mscorefonts
+RUN echo ttf-mscorefonts-installer msttcorefonts/accepted-mscorefonts-eula select true | debconf-set-selections \
+    && ln -sf /usr/share/zoneinfo/GMT0 /etc/localtime \
+    && sed -i '/\s*"snapcraft",/ s/^/#/' src/build/install-build-deps.py \
+    && bash src/build/install-build-deps.sh --backwards-compatible --no-prompt \
         --syms --android --lib32 --arm --chromeos-fonts
 
 # Replace depot_tools with the one from the chromium source
@@ -63,4 +73,6 @@ RUN rm -rf /opt/depot_tools \
 # -----------------------------------------------------------------------------
 # Clean up
 
-RUN rmdir /tmp/chromium
+WORKDIR /
+RUN rm -rf /tmp/chromium \
+    && bash /clean-after-apt.sh
