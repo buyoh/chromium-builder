@@ -76,3 +76,5 @@ RUN rm -rf /opt/depot_tools \
 WORKDIR /
 RUN rm -rf /tmp/chromium \
     && bash /clean-after-apt.sh
+
+ENV EDITOR=nano
