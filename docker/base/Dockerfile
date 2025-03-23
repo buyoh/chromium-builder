@@ -41,6 +41,11 @@ ENV PATH="/opt/depot_tools:$PATH" \
 RUN mkdir -p /tmp/chromium
 WORKDIR /tmp/chromium
 
+RUN (cd /opt/depot_tools \
+    && git fetch \
+    && git checkout -f main \
+    && git reset --hard origin/main)
+
 RUN gclient config --spec="solutions = [ \
     { \"url\": \"https://chromium.googlesource.com/chromium/src@$CHROMIUM_TAG\", \
         \"managed\": False, \
@@ -51,11 +56,11 @@ RUN gclient config --spec="solutions = [ \
     ]" \
     && echo '' >> .gclient \
     && echo 'target_os = ["linux", "android"]' >> .gclient \
-    && gclient sync -j 16 --shallow --with_branch_heads --force --nohooks
+    && gclient sync -j 4 --shallow --with_branch_heads --force --nohooks
 # Separate fetch and runhooks to cache the fetch
 # To avoid the error `Cannot change ownership to uid 376730, gid 89939: Invalid argument`,
 # we use TAR_OPTIONS=--no-same-owner
-RUN TAR_OPTIONS=--no-same-owner gclient runhooks -j 16
+RUN TAR_OPTIONS=--no-same-owner gclient runhooks -j 4
 
 # install build dependencies into docker image
 
