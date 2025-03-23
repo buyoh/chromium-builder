@@ -2,10 +2,6 @@
 
 Create a docker image for the Chromium develop envrionment.\
 
-## Limitations
-
-- Supports only `120.0.6099.234`.
-
 ## Install
 
 Add `bin` directory into PATH in the profile such as `.bashrc`.
@@ -35,10 +31,10 @@ export PATH="/path/to/chromium-builder/bin:$PATH"
 
 ## Hands on
 
-`120.0.6099.234` 向けの Docker image を作成する。
+`132.0.6834.161` 向けの Docker image を作成する。
 
 ```sh
-cr-setup-docker-image --apt-country jp
+cr-setup-docker-image --cr 132 --name m132 --apt-country jp --no-cache
 ```
 
 Chromium ソースコードをホストにフェッチする
@@ -53,7 +49,7 @@ cr-fetch-src
 
 ```sh
 cd ~/work/chromium
-cr-setup-docker-image
+cr-exec-env
 
 # In the docker container
 cd src
