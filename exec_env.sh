@@ -6,6 +6,7 @@ THIS_SCRIPT=$(readlink -f $0)
 # CHROMIUM_TAG="120.0.6099.234"
 ARG_DIST_CODENAME=focal
 
+ARG_CMD=
 
 while [[ $# > 0 ]]
 do
@@ -18,6 +19,11 @@ case $arg in
     grep "^ *##" $THIS_SCRIPT | sed -e "s/^ *##//"
     exit 0
     ;;
+    --)
+    shift
+    ARG_CMD="$@"
+    break
+    ;;
     *)
     echo "Unknow option "$arg
     exit 2
@@ -29,6 +35,9 @@ done
 # -----------------------------------------------------------------------------
 
 CMD=/bin/bash
+if [[ -n "$ARG_CMD" ]]; then
+    CMD="$ARG_CMD"
+fi
 
 DOCKER_ARG_MOUNTS=""
 
