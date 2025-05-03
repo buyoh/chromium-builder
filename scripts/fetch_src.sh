@@ -3,8 +3,9 @@
 set -eu
 THIS_SCRIPT=$(realpath $0)
 THIS_SCRIPT_DIR=$(dirname "$THIS_SCRIPT")
+BASE_DIR=$(dirname "$THIS_SCRIPT_DIR")
 
-DEPOT_TOOLS_DIR="$THIS_SCRIPT_DIR/var/depot_tools"
+DEPOT_TOOLS_DIR="$BASE_DIR/var/depot_tools"
 
 ARG_DEPOT_TOOLS_DIR=
 

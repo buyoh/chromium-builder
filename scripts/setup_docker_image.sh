@@ -2,6 +2,8 @@
 
 set -eu
 THIS_SCRIPT=$(readlink -f $0)
+THIS_SCRIPT_DIR=$(dirname "$THIS_SCRIPT")
+BASE_DIR=$(dirname "$THIS_SCRIPT_DIR")
 
 ARG_DIST_CODENAME=focal
 ARG_CR=
@@ -70,7 +72,7 @@ if [[ -n "$ARG_CR" ]] && [[ -n "$ARG_CHROMIUM_TAG" ]]; then
     exit 1
 fi
 
-cd $(dirname $0)
+cd $BASE_DIR
 
 if [[ -n "$ARG_CR" ]]; then
     ARG_CHROMIUM_TAG=$(./lib/suggest_cr_tag.sh $ARG_CR)

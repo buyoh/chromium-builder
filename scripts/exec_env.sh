@@ -2,6 +2,8 @@
 
 set -eu
 THIS_SCRIPT=$(readlink -f $0)
+THIS_SCRIPT_DIR=$(dirname "$THIS_SCRIPT")
+BASE_DIR=$(dirname "$THIS_SCRIPT_DIR")
 
 # CHROMIUM_TAG="120.0.6099.234"
 ARG_DIST_CODENAME=focal
