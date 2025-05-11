@@ -81,6 +81,22 @@ DOCKER_ARG_MOUNTS="$DOCKER_ARG_MOUNTS -v $PWD:/mnt/work"
 DOCKER_ARG_MOUNTS="$DOCKER_ARG_MOUNTS -v $THIS_SCRIPT_DIR/container:/mnt/scripts:ro"
 
 DOCKER_ARG_ENV=""
+if [[ -n "$DISPLAY" ]]; then
+    DOCKER_ARG_ENV="$DOCKER_ARG_ENV -e DISPLAY=$DISPLAY"
+fi
+DOCKER_ARG_MOUNTS="$DOCKER_ARG_MOUNTS -v /tmp/.X11-unix:/tmp/.X11-unix:ro"
+
+# Add GPU device access for GLES support
+if [[ -d /dev/dri ]]; then
+    DOCKER_ARG_MOUNTS="$DOCKER_ARG_MOUNTS --device /dev/dri:/dev/dri"
+fi
+
+# TODO: XAUTHORITY
+# XAUTH=/tmp/.docker.xauth
+# touch $XAUTH
+# xauth nlist $DISPLAY | sed -e 's/^..../ffff/' | xauth -f $XAUTH nmerge -
+# DOCKER_ARG_MOUNTS="$DOCKER_ARG_MOUNTS -v $XAUTH:$XAUTH:rw"
+# DOCKER_ARG_ENV="$DOCKER_ARG_ENV -e XAUTHORITY=$XAUTH"
 
 # TODO: Solve space. For instance, `ls "-l src"` should be failed by invalid option.
 
