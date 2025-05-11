@@ -31,21 +31,27 @@ export PATH="/path/to/chromium-builder/bin:$PATH"
 
 ## Hands on
 
-`132.0.6834.161` 向けの Docker image を作成する。
+### basic
+
+ベースとなる Docker image を作成する。
 
 ```sh
-cr-setup-docker-image --cr 132 --name m132 --apt-country jp --no-cache
+setup-base-docker-image --apt-country jp --no-cache
 ```
 
-Chromium ソースコードをホストにフェッチする
+Chromium リポジトリを取得する。
 
 ```sh
-mkdir -p ~/work/chromium
-cd ~/work/chromium
-cr-fetch-src
+cr-fetch-src --cr 132 --dest ~/work/chromium
 ```
 
-作成した Docker image から Docker container に入り、 Chromium をビルドする。
+リポジトリからビルド用 Docker image を作成する。Docker image の名前は `chrome/VERSION` を参照する。
+
+```sh
+setup-builder-docker-image --cr-dir ~/work/chromium
+```
+
+作成したビルド用 Docker image から Docker container に入り、 Chromium をビルドする。
 
 ```sh
 cd ~/work/chromium

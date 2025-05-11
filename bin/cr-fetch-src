@@ -1,2 +1,2 @@
 #!/bin/bash
-exec /bin/bash $(dirname $0)/../scripts/fetch_src.sh $@
+exec /bin/bash $(dirname $0)/../scripts/fetch-src.sh $@
