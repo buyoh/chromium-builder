@@ -7,13 +7,27 @@ BASE_DIR=$(dirname "$THIS_SCRIPT_DIR")
 
 # CHROMIUM_TAG="120.0.6099.234"
 ARG_DIST_CODENAME=focal
-
+ARG_IMAGE_NAME=
 ARG_CMD=
+ARG_USERNAME=
 
 while [[ $# > 0 ]]
 do
 arg="$1"
 case $arg in
+    ##  --image         : Set image name (e.g. env-chromium/focal:v1)
+    --image)
+    ARG_IMAGE_NAME=$2
+    shift
+    ;;
+    ##  --username      : Set username (e.g. developer)
+    ##                  : Default is root
+    ##                  : This option is used to run the command as a non-root user
+    ##                  : in the container.
+    --username)
+    ARG_USERNAME=$2
+    shift
+    ;;
     ##  --help, -h      : Show help
     --help|-h)
     echo "Usage: $0 [OPTION...]"
@@ -37,6 +51,7 @@ done
 # -----------------------------------------------------------------------------
 
 CHROMIUM_DIR=.
+CRENV_USER=
 
 if [[ ! -f "$CHROMIUM_DIR/src/chrome/VERSION" ]]; then
     echo "Error: $CHROMIUM_DIR is not a chromium source directory"
@@ -56,11 +71,26 @@ if [[ ! "$CHROMIUM_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
     exit 1
 fi
 
+if [[ -n "$ARG_USERNAME" ]]; then
+    # validate username
+    if [[ ! "$ARG_USERNAME" =~ ^[a-zA-Z0-9._-]+$ ]]; then
+        echo "Error: Invalid username: '$ARG_USERNAME'"
+        exit 1
+    fi
+    if [[ "$ARG_USERNAME" != "root" ]]; then
+        CRENV_USER=$ARG_USERNAME
+    fi
+fi
+
 # -----------------------------------------------------------------------------
 
 IMAGE_TAG=v1
 
-IMAGE_NAME=env-chromium-build/$ARG_DIST_CODENAME-$CHROMIUM_VERSION:$IMAGE_TAG
+if [[ -n "$ARG_IMAGE_NAME" ]]; then
+    IMAGE_NAME=$ARG_IMAGE_NAME:$IMAGE_TAG
+else
+    IMAGE_NAME=env-chromium-build/$ARG_DIST_CODENAME-$CHROMIUM_VERSION:$IMAGE_TAG
+fi
 
 if [[ -z $(docker images -q $IMAGE_NAME ) ]]; then
     echo "Error: Docker image $IMAGE_NAME not found"
@@ -81,6 +111,11 @@ DOCKER_ARG_MOUNTS="$DOCKER_ARG_MOUNTS -v $PWD:/mnt/work"
 DOCKER_ARG_MOUNTS="$DOCKER_ARG_MOUNTS -v $THIS_SCRIPT_DIR/container:/mnt/scripts:ro"
 
 DOCKER_ARG_ENV=""
+
+if [[ -n "$CRENV_USER" ]]; then
+    DOCKER_ARG_ENV="$DOCKER_ARG_ENV -e CRENV_USER=$CRENV_USER"
+fi
+
 if [[ -n "$DISPLAY" ]]; then
     DOCKER_ARG_ENV="$DOCKER_ARG_ENV -e DISPLAY=$DISPLAY"
 fi
