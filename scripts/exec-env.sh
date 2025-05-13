@@ -8,6 +8,7 @@ BASE_DIR=$(dirname "$THIS_SCRIPT_DIR")
 # CHROMIUM_TAG="120.0.6099.234"
 ARG_DIST_CODENAME=focal
 ARG_IMAGE_NAME=
+ARG_XEPHYR=
 ARG_CMD=
 ARG_USERNAME=
 
@@ -18,6 +19,12 @@ case $arg in
     ##  --image         : Set image name (e.g. env-chromium/focal:v1)
     --image)
     ARG_IMAGE_NAME=$2
+    shift
+    ;;
+    ##  --xephyr <width>x<height>
+    ##                  : Use Xephyr and set display size (e.g. 1280x720)
+    --xephyr)
+    ARG_XEPHYR=$2
     shift
     ;;
     ##  --username      : Set username (e.g. developer)
@@ -82,6 +89,19 @@ if [[ -n "$ARG_USERNAME" ]]; then
     fi
 fi
 
+XEPHYR_DISPLAY_SIZE=
+XEPHYR_DISPLAY=
+
+if [[ -n "$ARG_XEPHYR" ]]; then
+    # validate display size
+    if [[ ! "$ARG_XEPHYR" =~ ^[0-9]+x[0-9]+$ ]]; then
+        echo "Error: Invalid display size: '$ARG_XEPHYR'"
+        exit 1
+    fi
+    XEPHYR_DISPLAY_SIZE=$ARG_XEPHYR
+    XEPHYR_DISPLAY=:99
+fi
+
 # -----------------------------------------------------------------------------
 
 IMAGE_TAG=v1
@@ -98,6 +118,8 @@ if [[ -z $(docker images -q $IMAGE_NAME ) ]]; then
 fi
 
 # -----------------------------------------------------------------------------
+
+trap 'kill $(jobs -p)' EXIT
 
 PRE_CMD="/bin/bash /mnt/scripts/cmd-prepare.sh"
 
@@ -116,7 +138,12 @@ if [[ -n "$CRENV_USER" ]]; then
     DOCKER_ARG_ENV="$DOCKER_ARG_ENV -e CRENV_USER=$CRENV_USER"
 fi
 
-if [[ -n "$DISPLAY" ]]; then
+if [[ -n "$XEPHYR_DISPLAY" ]]; then
+    Xephyr -br -ac -noreset -screen "$XEPHYR_DISPLAY_SIZE" -resizeable $XEPHYR_DISPLAY &
+    sleep 0.5
+    # xhost +SI:localuser:root
+    DOCKER_ARG_ENV="$DOCKER_ARG_ENV -e DISPLAY=$XEPHYR_DISPLAY"
+elif [[ -n "$DISPLAY" ]]; then
     DOCKER_ARG_ENV="$DOCKER_ARG_ENV -e DISPLAY=$DISPLAY"
 fi
 DOCKER_ARG_MOUNTS="$DOCKER_ARG_MOUNTS -v /tmp/.X11-unix:/tmp/.X11-unix:ro"
@@ -125,13 +152,6 @@ DOCKER_ARG_MOUNTS="$DOCKER_ARG_MOUNTS -v /tmp/.X11-unix:/tmp/.X11-unix:ro"
 if [[ -d /dev/dri ]]; then
     DOCKER_ARG_MOUNTS="$DOCKER_ARG_MOUNTS --device /dev/dri:/dev/dri"
 fi
-
-# TODO: XAUTHORITY
-# XAUTH=/tmp/.docker.xauth
-# touch $XAUTH
-# xauth nlist $DISPLAY | sed -e 's/^..../ffff/' | xauth -f $XAUTH nmerge -
-# DOCKER_ARG_MOUNTS="$DOCKER_ARG_MOUNTS -v $XAUTH:$XAUTH:rw"
-# DOCKER_ARG_ENV="$DOCKER_ARG_ENV -e XAUTHORITY=$XAUTH"
 
 # TODO: Solve space. For instance, `ls "-l src"` should be failed by invalid option.
 
