@@ -8,6 +8,7 @@ BASE_DIR=$(dirname "$THIS_SCRIPT_DIR")
 # CHROMIUM_TAG="120.0.6099.234"
 ARG_DIST_CODENAME=focal
 ARG_IMAGE_NAME=
+ARG_GPU_ALL=false
 ARG_XEPHYR=
 ARG_CMD=
 ARG_USERNAME=
@@ -20,6 +21,10 @@ case $arg in
     --image)
     ARG_IMAGE_NAME=$2
     shift
+    ;;
+    ##  --gpu-all       : Set `--gpus all` option
+    --gpu-all)
+    ARG_GPU_ALL=true
     ;;
     ##  --xephyr <width>x<height>
     ##                  : Use Xephyr and set display size (e.g. 1280x720)
@@ -119,8 +124,6 @@ fi
 
 # -----------------------------------------------------------------------------
 
-trap 'kill $(jobs -p)' EXIT
-
 PRE_CMD="/bin/bash /mnt/scripts/cmd-prepare.sh"
 
 CMD=/bin/bash
@@ -128,6 +131,8 @@ if [[ -n "$ARG_CMD" ]]; then
     CMD=$ARG_CMD
 fi
 
+DOCKER_ARG=""
+DOCKER_ARG_PRIVILEGED=""
 DOCKER_ARG_MOUNTS=""
 DOCKER_ARG_MOUNTS="$DOCKER_ARG_MOUNTS -v $PWD:/mnt/work"
 DOCKER_ARG_MOUNTS="$DOCKER_ARG_MOUNTS -v $THIS_SCRIPT_DIR/container:/mnt/scripts:ro"
@@ -155,8 +160,14 @@ fi
 
 # TODO: Solve space. For instance, `ls "-l src"` should be failed by invalid option.
 
-exec docker run --init -it --rm \
+if [[ "$ARG_GPU_ALL" == true ]]; then
+    DOCKER_ARG="$DOCKER_ARG --gpus all"
+    # DOCKER_ARG_PRIVILEGED="--privileged"
+fi
+
+exec docker run --init -it --rm $DOCKER_ARG \
   -w /mnt/work \
+  $DOCKER_ARG_PRIVILEGED \
   $DOCKER_ARG_ENV \
   $DOCKER_ARG_MOUNTS \
   $IMAGE_NAME \
