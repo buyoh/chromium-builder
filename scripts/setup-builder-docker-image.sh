@@ -7,6 +7,7 @@ BASE_DIR=$(dirname "$THIS_SCRIPT_DIR")
 
 ARG_DIST_CODENAME=focal
 ARG_CHROMIUM_DIR=
+ARG_GCLIENT_SYNC=false
 
 while [[ $# > 0 ]]
 do
@@ -16,6 +17,10 @@ case $arg in
     --cr-dir)
     ARG_CHROMIUM_DIR="$2"
     shift
+    ;;
+    ##  --gclient-sync  : Run gclient sync. Default is to run gclient runhooks.
+    --gclient-sync)
+    ARG_GCLIENT_SYNC=true
     ;;
     ##  --help, -h      : Show help
     --help|-h)
@@ -98,6 +103,8 @@ NEW_IMAGE_NAME=env-chromium-build/$ARG_DIST_CODENAME-$CHROMIUM_VERSION:$IMAGE_TA
 DOCKER_ARG_MOUNTS=""
 DOCKER_ARG_MOUNTS="$DOCKER_ARG_MOUNTS -v $CHROMIUM_DIR:/mnt/work"
 DOCKER_ARG_MOUNTS="$DOCKER_ARG_MOUNTS -v $THIS_SCRIPT_DIR/container:/mnt/scripts:ro"
+
+DOCKER_ARG_MOUNTS="$DOCKER_ARG_MOUNTS -e ARG_GCLIENT_SYNC=$ARG_GCLIENT_SYNC"
 
 trap 'docker rm -f $WORKING_CONTAINER_NAME > /dev/null' EXIT
 
