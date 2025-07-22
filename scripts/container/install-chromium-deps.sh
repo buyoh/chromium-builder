@@ -70,15 +70,15 @@ fi
 # Use debconf-set-selections to accept the EULA for mscorefonts
 echo ttf-mscorefonts-installer msttcorefonts/accepted-mscorefonts-eula select true | debconf-set-selections \
     && ln -sf /usr/share/zoneinfo/GMT0 /etc/localtime \
-    && (sed -i '/\s*"snapcraft",/ s/^/#/' src/build/install-build-deps.py ;
-        sed -i '/\s*"snapcraft",/ s/^/#/' src/build/install-build-deps.sh ;
+    && (sed -i '/snapcraft,/ s/^/#/' src/build/install-build-deps.py ;
+        sed -i '/snapcraft,/ s/^/#/' src/build/install-build-deps.sh ;
         true) \
     && bash src/build/install-build-deps.sh --backwards-compatible --no-prompt \
         --syms --android --lib32 --arm --chromeos-fonts
 
 # Replace depot_tools with the one from the chromium source
 rm -rf /opt/depot_tools \
-    && cp -ar /tmp/chromium/src/third_party/depot_tools /opt/depot_tools
+    && cp -ar $WORK_DIR/src/third_party/depot_tools /opt/depot_tools
 
 # ----------------------------------------------------
 # Clean up
