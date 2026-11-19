@@ -1,6 +1,8 @@
 #!/bin/bash
 
-set -e
+set -euo pipefail
+
+source "$(dirname "$0")/common.sh"
 
 # environment variables
 
@@ -18,33 +20,19 @@ apt-get -qqy upgrade
 
 # ----------------------------------------------------
 
-cd $WORK_DIR
+cd "$WORK_DIR"
 
-CHROMIUM_VERSION_MAJOR=
-
-if [[ -f "$WORK_DIR/src/chrome/VERSION" ]]; then
-    CHROMIUM_VERSION_MAJOR=$(source "$WORK_DIR/src/chrome/VERSION" && echo "$MAJOR")
-    echo "version = $CHROMIUM_VERSION_MAJOR"
-fi
-
-COMMIT_HASH_DEPOT_TOOLS=
-
-if [[ -f "$WORK_DIR/src/DEPS" ]]; then
-    COMMIT_HASH_DEPOT_TOOLS=$(cat $WORK_DIR/src/DEPS | grep '/chromium/tools/depot_tools.git' | sed "s/.*@'//g" | tr -dc "a-f0-9")
-fi
+CHROMIUM_VERSION_MAJOR=$(sed -n 's/^MAJOR=//p' "$WORK_DIR/src/chrome/VERSION")
+echo "version = $CHROMIUM_VERSION_MAJOR"
 
 # ----------------------------------------------------
 
 if [[ ! -x "$(command -v gclient)" ]]; then
-    if [[ -n $COMMIT_HASH_DEPOT_TOOLS ]]; then
-        # clone with specific commit hash
-        git init /opt/depot_tools
-        git -C /opt/depot_tools remote add origin https://chromium.googlesource.com/chromium/tools/depot_tools.git
-        git -C /opt/depot_tools fetch --depth 1 origin $COMMIT_HASH_DEPOT_TOOLS &&
-        git -C /opt/depot_tools checkout $COMMIT_HASH_DEPOT_TOOLS
-    else
-        git clone https://chromium.googlesource.com/chromium/tools/depot_tools.git /opt/depot_tools
-    fi
+    COMMIT_HASH_DEPOT_TOOLS=$(depot_tools_revision "$WORK_DIR/src/DEPS")
+    git init /opt/depot_tools
+    git -C /opt/depot_tools remote add origin https://chromium.googlesource.com/chromium/tools/depot_tools.git
+    git -C /opt/depot_tools fetch --depth 1 origin "$COMMIT_HASH_DEPOT_TOOLS"
+    git -C /opt/depot_tools checkout "$COMMIT_HASH_DEPOT_TOOLS"
     export PATH=/opt/depot_tools:$PATH
     export DEPOT_TOOLS_UPDATE=0
 fi
@@ -53,32 +41,62 @@ fi
 # we use TAR_OPTIONS=--no-same-owner
 # NOTE: Removed due to `Permission denied: '/mnt/work/src/out/default/../../third_party/node/linux/node-linux-x64/bin/node'`
 
-SUBCMD_GCLIENT="runhooks -j 16 --force"
+SUBCMD_GCLIENT=(runhooks -j 16 --force)
 if [[ "$ARG_GCLIENT_SYNC" == true ]]; then
-    SUBCMD_GCLIENT="sync -D -j 16 --force"
+    SUBCMD_GCLIENT=(sync -D -j 16 --force)
 fi
 
 if [[ "$CHROMIUM_VERSION_MAJOR" == 114 ]]; then
     # TODO: Only for m114?
-    TAR_OPTIONS=--no-same-owner gclient $SUBCMD_GCLIENT -j 16 --force
+    TAR_OPTIONS=--no-same-owner gclient "${SUBCMD_GCLIENT[@]}"
 else
-    gclient $SUBCMD_GCLIENT -j 16 --force
+    gclient "${SUBCMD_GCLIENT[@]}"
 fi
 
 # install build dependencies into docker image
 
 # Use debconf-set-selections to accept the EULA for mscorefonts
-echo ttf-mscorefonts-installer msttcorefonts/accepted-mscorefonts-eula select true | debconf-set-selections \
-    && ln -sf /usr/share/zoneinfo/GMT0 /etc/localtime \
-    && (sed -i '/snapcraft,/ s/^/#/' src/build/install-build-deps.py ;
-        sed -i '/snapcraft,/ s/^/#/' src/build/install-build-deps.sh ;
-        true) \
-    && bash src/build/install-build-deps.sh --backwards-compatible --no-prompt \
-        --syms --android --lib32 --arm --chromeos-fonts
+echo ttf-mscorefonts-installer msttcorefonts/accepted-mscorefonts-eula select true | debconf-set-selections
+# sudo in install-build-deps drops DEBIAN_FRONTEND.
+echo debconf debconf/frontend select Noninteractive | debconf-set-selections
+ln -sf /usr/share/zoneinfo/GMT0 /etc/localtime
 
-# Replace depot_tools with the one from the chromium source
-rm -rf /opt/depot_tools \
-    && cp -ar $WORK_DIR/src/third_party/depot_tools /opt/depot_tools
+# On Ubuntu, snapcraft is a transitional package that installs the snap from
+# the store, which cannot work in a container. install-build-deps requests it,
+# so satisfy the request with an empty package.
+SNAPCRAFT_DUMMY_DIR=$(mktemp -d)
+SNAPCRAFT_DUMMY_DEB=$(mktemp --suffix=.deb)
+chmod 755 "$SNAPCRAFT_DUMMY_DIR"
+mkdir "$SNAPCRAFT_DUMMY_DIR/DEBIAN"
+cat > "$SNAPCRAFT_DUMMY_DIR/DEBIAN/control" <<EOF
+Package: snapcraft
+Version: 9999
+Architecture: all
+Maintainer: chromium-builder <noreply@example.com>
+Description: Empty package to keep the snap-based snapcraft out of the image
+EOF
+dpkg-deb --build "$SNAPCRAFT_DUMMY_DIR" "$SNAPCRAFT_DUMMY_DEB"
+dpkg -i "$SNAPCRAFT_DUMMY_DEB"
+rm -rf "$SNAPCRAFT_DUMMY_DIR" "$SNAPCRAFT_DUMMY_DEB"
+
+# Older versions reject --android. --help cannot detect it: 114 rejects --help,
+# and 132 hides --android from it. Here --android adds nothing to --lib32.
+INSTALL_BUILD_DEPS_ARGS=(--backwards-compatible --no-prompt --syms --lib32 --arm --chromeos-fonts)
+if grep -qsE -- '^[[:space:]]*(--android\)|"--android",)' \
+    src/build/install-build-deps.sh src/build/install-build-deps.py; then
+    INSTALL_BUILD_DEPS_ARGS+=(--android)
+fi
+
+# -e: bash ignores the option in the shebang of install-build-deps.sh.
+bash -e src/build/install-build-deps.sh "${INSTALL_BUILD_DEPS_ARGS[@]}"
+
+# 102 and 108 keep the Android dependencies in a separate script.
+if [[ -f src/build/install-build-deps-android.sh ]]; then
+    bash src/build/install-build-deps-android.sh
+fi
+
+# The depot_tools in the source tree is used at runtime.
+rm -rf /opt/depot_tools
 
 # ----------------------------------------------------
 # Clean up

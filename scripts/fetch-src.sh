@@ -1,21 +1,19 @@
 #!/bin/bash
 
 set -eu
-THIS_SCRIPT=$(readlink -f $0)
+THIS_SCRIPT=$(readlink -f "$0")
 THIS_SCRIPT_DIR=$(dirname "$THIS_SCRIPT")
 BASE_DIR=$(dirname "$THIS_SCRIPT_DIR")
+source "$BASE_DIR/lib/common.sh"
 
 ARG_CHROMIUM_TAG=
 ARG_CR=
 ARG_WORK_DIR=
-ARG_REFERENCE_DIR=
+ARG_FULL_HISTORY=false
 
-CHECKOUT_CHROMIUM_TAG=
 CHECKOUT_LATEST=false
-ARG_DIST_CODENAME=focal
 
 WORK_DIR=
-REFERENCE_DIR=
 
 while [[ $# > 0 ]]
 do
@@ -33,28 +31,24 @@ case $arg in
     ARG_CR="$2"
     shift
     ;;
-    ##  --reference <path> : Mount the directory and use git clone --reference
-    ##                     : "src" directory must be set different from --dest
-    ##                     : The dependencies will not be referenced
-    --reference)
-    ARG_REFERENCE_DIR="$2"
-    echo "--reference is not tested yet" ; exit 1
-    shift
-    ;;
     ##  --dest <path>      : Mount the directory and pull the source code to the directory
     --dest)
     ARG_WORK_DIR="$2"
     shift
     ;;
+    ##  --full-history     : Fetch the full history. Default is the latest commits only.
+    --full-history)
+    ARG_FULL_HISTORY=true
+    ;;
     ##  --help, -h         : Show help
     --help|-h)
     echo "Usage: $0 [OPTION...]"
     echo ""
-    grep "^ *##" $THIS_SCRIPT | sed -e "s/^ *##//"
+    grep "^ *##" "$THIS_SCRIPT" | sed -e "s/^ *##//"
     exit 0
     ;;
     *)
-    echo "Unknow option "$arg
+    echo "Unknow option $arg"
     exit 2
     ;;
 esac
@@ -65,7 +59,7 @@ done
 # Check arguments
 
 if [[ -z "$ARG_CHROMIUM_TAG" ]] && [[ -z "$ARG_CR" ]]; then
-    echo "Error: --chromium or --cr or --latest is required"
+    echo "Error: --chromium or --cr is required"
     exit 1
 fi
 
@@ -85,7 +79,7 @@ if [[ -n "$ARG_CR" ]]; then
     if [[ "$ARG_CR" == "HEAD" ]]; then
         CHECKOUT_LATEST=true
     else
-        ARG_CHROMIUM_TAG=$(./lib/suggest_cr_tag.sh $ARG_CR)
+        ARG_CHROMIUM_TAG=$("$BASE_DIR/lib/suggest_cr_tag.sh" "$ARG_CR")
         if [[ -z "$ARG_CHROMIUM_TAG" ]]; then
             echo "Error: Chromium tag not found: '$ARG_CR'"
             exit 1
@@ -93,15 +87,19 @@ if [[ -n "$ARG_CR" ]]; then
     fi
 fi
 
-if ! "$CHECKOUT_LATEST" && [[ ! "$ARG_CHROMIUM_TAG" =~ ^[-0-9A-Za-z.-_]+$ ]]; then
+if ! "$CHECKOUT_LATEST" && [[ ! "$ARG_CHROMIUM_TAG" =~ ^[0-9]+(\.[0-9]+){3}$ ]]; then
     echo "Error: Invalid chromium tag: '$ARG_CHROMIUM_TAG'"
     exit 1
 fi
 
+IMAGE_NAME=$(base_image_name)
+
+require_image "$IMAGE_NAME" "Run cr-setup-base-docker-image to create it"
+
 # -----------------------------------------------------------------------------
 # Check WORK_DIR
 
-WORK_DIR_ABSOLUTE=$(realpath "$ARG_WORK_DIR")
+WORK_DIR_ABSOLUTE=$(realpath -m "$ARG_WORK_DIR")
 if [[ -e "$WORK_DIR_ABSOLUTE" ]] && [[ ! -d "$WORK_DIR_ABSOLUTE" ]]; then
     echo "Error: $ARG_WORK_DIR is not a directory"
     exit 1
@@ -117,44 +115,25 @@ if [[ ! -d "$WORK_DIR" ]]; then
 fi
 
 # -----------------------------------------------------------------------------
-# Check REFERENCE_DIR
 
-if [[ -n "$ARG_REFERENCE_DIR" ]]; then
-    REFERENCE_DIR_ABSOLUTE=$(realpath "$ARG_REFERENCE_DIR")
-    if [[ ! -d "$REFERENCE_DIR_ABSOLUTE" ]]; then
-        echo "Error: $ARG_REFERENCE_DIR is not a directory"
-        exit 1
-    fi
-    REFERENCE_DIR="$REFERENCE_DIR_ABSOLUTE"
-else
-    REFERENCE_DIR=
-fi
+DOCKER_CMD=(/bin/bash "$CONTAINER_SCRIPTS_DIR/fetch-src.sh")
 
-# -----------------------------------------------------------------------------
+DOCKER_ARGS=(--pull=never --init --rm -w "$CONTAINER_WORK_DIR")
+DOCKER_ARGS+=(-v "$WORK_DIR:$CONTAINER_WORK_DIR")
+DOCKER_ARGS+=(-v "$THIS_SCRIPT_DIR/container:$CONTAINER_SCRIPTS_DIR:ro")
 
-DOCKER_CMD="/bin/bash /mnt/scripts/fetch-src.sh"
-
-DOCKER_ARG_MOUNTS=""
-DOCKER_ARG_MOUNTS="$DOCKER_ARG_MOUNTS -v $WORK_DIR:/mnt/work"
-DOCKER_ARG_MOUNTS="$DOCKER_ARG_MOUNTS -v $THIS_SCRIPT_DIR/container:/mnt/scripts:ro"
-
-DOCKER_ARG_ENV=""
-
-if [[ -n "$REFERENCE_DIR" ]]; then
-    DOCKER_ARG_MOUNTS="$DOCKER_ARG_MOUNTS -v $REFERENCE_DIR:/mnt/reference"
-    DOCKER_ARG_ENV="$DOCKER_ARG_ENV -e USE_REFERENCE=true"
+if [[ -t 0 ]]; then
+    DOCKER_ARGS+=(-it)
 fi
 
 if "$CHECKOUT_LATEST"; then
-    DOCKER_ARG_ENV="$DOCKER_ARG_ENV -e CHECKOUT_LATEST=true"
+    DOCKER_ARGS+=(-e CHECKOUT_LATEST=true)
 else
-    DOCKER_ARG_ENV="$DOCKER_ARG_ENV -e CHECKOUT_CHROMIUM_TAG=$ARG_CHROMIUM_TAG"
+    DOCKER_ARGS+=(-e "CHECKOUT_CHROMIUM_TAG=$ARG_CHROMIUM_TAG")
 fi
 
-docker run --init -it --rm \
-    -w /mnt/work \
-    $DOCKER_ARG_MOUNTS \
-    $DOCKER_ARG_ENV \
-    env-chromium/$ARG_DIST_CODENAME:v1 \
-    $DOCKER_CMD
+if "$ARG_FULL_HISTORY"; then
+    DOCKER_ARGS+=(-e FULL_HISTORY=true)
+fi
 
+docker run "${DOCKER_ARGS[@]}" "$IMAGE_NAME" "${DOCKER_CMD[@]}"

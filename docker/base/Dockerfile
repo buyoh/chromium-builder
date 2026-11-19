@@ -16,13 +16,10 @@ RUN UBUNTU_APT_URL=$UBUNTU_APT_URL DIST_CODENAME=$DIST_CODENAME . /configure-apt
         git ca-certificates wget curl lsb-release sudo file \
         python xz-utils \
         nano
-# TODO: don't clean apt cache here. install-build-deps.sh will use apt-get.
 
 # We never push commits
 RUN git config --global user.email "user@example.com" \
     && git config --global user.name "user.name"
-
-COPY fetch-src.sh /fetch-src.sh
 
 ENV DEPOT_TOOLS_UPDATE=0
 
@@ -30,7 +27,6 @@ ENV DEPOT_TOOLS_UPDATE=0
 # Clean up
 
 WORKDIR /
-RUN rm -rf /tmp/chromium \
-    && bash /clean-after-apt.sh
+RUN bash /clean-after-apt.sh
 
 ENV EDITOR=nano

@@ -1,13 +1,14 @@
+set -euo pipefail
+
 export PATH=/mnt/work/src/third_party/depot_tools:$PATH
 
-if [[ -n "$CRENV_USER" ]]; then
-    useradd -u 1000 --user-group --create-home --non-unique $CRENV_USER
-    chown $CRENV_USER:$CRENV_USER /mnt/work
-    usermod -aG $CRENV_USER root
+if [[ -n "${CRENV_USER:-}" ]]; then
+    groupadd -g "$CRENV_GID" --non-unique "$CRENV_USER"
+    useradd -u "$CRENV_UID" -g "$CRENV_GID" --create-home --shell /bin/bash --non-unique "$CRENV_USER"
 
     # change current user to $CRENV_USER
-    sudo -u $CRENV_USER "$@"
-    # sudo -u $CRENV_USER -i bash -c 'cd '$PWD' && "$@"' -- "$@"
+    # sudo drops PATH and the other environment variables.
+    exec sudo -u "$CRENV_USER" env "PATH=$PATH" DEPOT_TOOLS_UPDATE=0 "$@"
 else
-    exec "$@"
+    exec -- "$@"
 fi

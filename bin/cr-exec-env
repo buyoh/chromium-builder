@@ -1,2 +1,2 @@
 #!/bin/bash
-exec /bin/bash $(dirname $0)/../scripts/exec-env.sh "$@"
+exec /bin/bash "$(dirname "$0")/../scripts/exec-env.sh" "$@"

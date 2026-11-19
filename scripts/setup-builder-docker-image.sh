@@ -1,11 +1,11 @@
 #!/bin/bash
 
 set -eu
-THIS_SCRIPT=$(readlink -f $0)
+THIS_SCRIPT=$(readlink -f "$0")
 THIS_SCRIPT_DIR=$(dirname "$THIS_SCRIPT")
 BASE_DIR=$(dirname "$THIS_SCRIPT_DIR")
+source "$BASE_DIR/lib/common.sh"
 
-ARG_DIST_CODENAME=focal
 ARG_CHROMIUM_DIR=
 ARG_GCLIENT_SYNC=false
 
@@ -26,11 +26,11 @@ case $arg in
     --help|-h)
     echo "Usage: $0 [OPTION...]"
     echo ""
-    grep "^ *##" $THIS_SCRIPT | sed -e "s/^ *##//"
+    grep "^ *##" "$THIS_SCRIPT" | sed -e "s/^ *##//"
     exit 0
     ;;
     *)
-    echo "Unknow option "$arg
+    echo "Unknow option $arg"
     exit 2
     ;;
 esac
@@ -52,65 +52,34 @@ if [[ ! -d "$CHROMIUM_DIR" ]]; then
     exit 1
 fi
 
-if [[ ! -f "$CHROMIUM_DIR/src/chrome/VERSION" ]]; then
-    echo "Error: $CHROMIUM_DIR is not a chromium source directory"
-    echo "Error: $CHROMIUM_DIR/src/chrome/VERSION not found"
-    exit 1
-fi
-
-CHROMIUM_VERSION=$(source "$CHROMIUM_DIR/src/chrome/VERSION" && echo "$MAJOR.$MINOR.$BUILD.$PATCH")
-
-if [[ -z "$CHROMIUM_VERSION" ]]; then
-    echo "Error: $CHROMIUM_DIR/src/chrome/VERSION is empty"
-    exit 1
-fi
-
-if [[ ! "$CHROMIUM_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-    echo "Error: Invalid chromium version: '$CHROMIUM_VERSION'"
-    exit 1
-fi
+CHROMIUM_VERSION=$(read_chromium_version "$CHROMIUM_DIR")
 
 # -----------------------------------------------------------------------------
 
-cd $BASE_DIR
+cd "$BASE_DIR"
 
-# if [[ -n "$ARG_CR" ]]; then
-#     ARG_CHROMIUM_TAG=$(./lib/suggest_cr_tag.sh $ARG_CR)
-#     if [[ -z "$ARG_CHROMIUM_TAG" ]]; then
-#         echo "Error: Chromium tag not found: '$ARG_CR'"
-#         exit 1
-#     fi
-# fi
+DOCKER_CMD=(/bin/bash "$CONTAINER_SCRIPTS_DIR/install-chromium-deps.sh")
 
-# if [[ ! "$ARG_CHROMIUM_TAG" =~ ^[-0-9A-Za-z.-_]+$ ]]; then
-#     echo "Error: Invalid chromium tag: '$ARG_CHROMIUM_TAG'"
-#     exit 1
-# fi
+WORKING_CONTAINER_NAME=env-chromium-tmp-$$
+BASE_IMAGE_NAME=$(base_image_name)
+NEW_IMAGE_NAME=$(builder_image_name "$CHROMIUM_VERSION")
 
-# if [[ -z "$ARG_NAME" ]]; then
-#     ARG_NAME=$ARG_CHROMIUM_TAG
-# fi
+require_image "$BASE_IMAGE_NAME" "Run cr-setup-base-docker-image to create it"
 
-IMAGE_TAG=v1
+DOCKER_ARGS=(--pull=never --name "$WORKING_CONTAINER_NAME")
+DOCKER_ARGS+=(-v "$CHROMIUM_DIR:$CONTAINER_WORK_DIR")
+DOCKER_ARGS+=(-v "$THIS_SCRIPT_DIR/container:$CONTAINER_SCRIPTS_DIR:ro")
+DOCKER_ARGS+=(-e "ARG_GCLIENT_SYNC=$ARG_GCLIENT_SYNC")
 
-DOCKER_CMD="/bin/bash /mnt/scripts/install-chromium-deps.sh"
-# DOCKER_CMD="ls /mnt/scripts"
+if [[ -t 0 ]]; then
+    DOCKER_ARGS+=(-it)
+fi
 
-WORKING_CONTAINER_NAME=env-chromium-tmp
-BASE_IMAGE_NAME=env-chromium/$ARG_DIST_CODENAME:$IMAGE_TAG
-NEW_IMAGE_NAME=env-chromium-build/$ARG_DIST_CODENAME-$CHROMIUM_VERSION:$IMAGE_TAG
+trap 'docker rm -f "$WORKING_CONTAINER_NAME" > /dev/null' EXIT
 
-DOCKER_ARG_MOUNTS=""
-DOCKER_ARG_MOUNTS="$DOCKER_ARG_MOUNTS -v $CHROMIUM_DIR:/mnt/work"
-DOCKER_ARG_MOUNTS="$DOCKER_ARG_MOUNTS -v $THIS_SCRIPT_DIR/container:/mnt/scripts:ro"
+docker run "${DOCKER_ARGS[@]}" "$BASE_IMAGE_NAME" "${DOCKER_CMD[@]}"
 
-DOCKER_ARG_MOUNTS="$DOCKER_ARG_MOUNTS -e ARG_GCLIENT_SYNC=$ARG_GCLIENT_SYNC"
-
-trap 'docker rm -f $WORKING_CONTAINER_NAME > /dev/null' EXIT
-
-docker run -it --name $WORKING_CONTAINER_NAME \
-    $DOCKER_ARG_MOUNTS \
-    $BASE_IMAGE_NAME $DOCKER_CMD
-
-docker commit env-chromium-tmp $NEW_IMAGE_NAME
-docker rm $WORKING_CONTAINER_NAME > /dev/null
+docker commit \
+    --change 'CMD ["/bin/bash"]' \
+    --change 'ENV ARG_GCLIENT_SYNC=' \
+    "$WORKING_CONTAINER_NAME" "$NEW_IMAGE_NAME"

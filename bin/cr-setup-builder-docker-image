@@ -1,2 +1,2 @@
 #!/bin/bash
-exec /bin/bash $(dirname $0)/../scripts/setup-builder-docker-image.sh "$@"
+exec /bin/bash "$(dirname "$0")/../scripts/setup-builder-docker-image.sh" "$@"
